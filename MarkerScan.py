@@ -5,9 +5,14 @@ from PIL import Image, ImageChops
 import math
 from PyQt6.QtWidgets import QApplication, QWidget, QFileDialog
 from MarkerScanUI import Ui_MarkerScan
+import random
+import matplotlib.pyplot as plt
 
 size = 8000
-
+# Глобальные переменные для хранения координат двух точек
+point1 = None
+point2 = None
+lines = []
 target_image = ''
 trouble_text = ''
 sample_images = ['samples/sample_110.png', 'samples/sample_110_alt.png']
@@ -158,7 +163,49 @@ class MarkerScan(QWidget):
                 imgCv_2 = LineImgCrop(target_image)
 
                 if (imgCv_1 is not None) and (imgCv_2 is not None):
-                
+                    
+                    color_image = cv2.cvtColor(imgCv_2, cv2.COLOR_GRAY2BGR)
+                    
+
+                    '''# Применение алгоритма Хафа для обнаружения линий
+                    edges = cv2.Canny(imgCv_2, 50, 150, apertureSize=3)
+                    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=200, maxLineGap=100)
+
+                    # Рисование обнаруженных линий на изображении
+                    for line in lines:
+                        x1, y1, x2, y2 = line[0]
+                        cv2.line(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+                    # Поиск пересечений линий
+                    intersections = []
+                    for i in range(len(lines)):
+                        for j in range(i+1, len(lines)):
+                            line1 = lines[i][0]
+                            line2 = lines[j][0]
+                            x1, y1, x2, y2 = line1
+                            x3, y3, x4, y4 = line2
+                            denominator = ((y4-y3)*(x2-x1)) - ((x4-x3)*(y2-y1))
+                            if denominator != 0:
+                                ua = (((x4-x3)*(y1-y3)) - ((y4-y3)*(x1-x3))) / denominator
+                                ub = (((x2-x1)*(y1-y3)) - ((y2-y1)*(x1-x3))) / denominator
+                                if 0 < ua < 1 and 0 < ub < 1:
+                                    intersection_x = int(x1 + ua*(x2-x1))
+                                    intersection_y = int(y1 + ua*(y2-y1))
+                                    intersections.append((intersection_x, intersection_y))
+                                    cv2.circle(color_image, (intersection_x, intersection_y), 5, (255, 0, 0), -1)
+                                    # Генерация рандомного цвета текста
+                                    text_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+                                    # Нарисовать прямоугольник под текстом координат
+                                    cv2.rectangle(color_image, (intersection_x + 15, intersection_y - 25), 
+                                                (intersection_x + 150, intersection_y + 5), (0, 0, 0), -1)
+                                    # Добавление текста с координатами рядом с точками
+                                    cv2.putText(color_image, f'({intersection_x}, {intersection_y})', 
+                                                (intersection_x + 10, intersection_y), 
+                                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
+                    print(len(intersections))
+                    
+                    Image.fromarray(color_image).show()'''
+
                     imgPIL_1 = Image.fromarray(imgCv_1)
                     imgPIL_2 = Image.fromarray(imgCv_2)
 
@@ -179,7 +226,7 @@ class MarkerScan(QWidget):
                                 new_pixels[i, j] = (255, 255, 255, 255)
 
                             else:
-                                new_pixels[i, j] = (255, 0, 0, 255)
+                                new_pixels[i, j] = (0, 0, 255, 255)
 
                     original_image = Image.new("RGBA", bitImg1.size, (0, 0, 0, 0))
 
@@ -199,9 +246,65 @@ class MarkerScan(QWidget):
                     result_image.paste(new_image, (0, 0))
                     result_image.paste(original_image, (0, 0), original_image)
 
-                    SaveFile(self, result_image)
+                    cv_image = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
 
-                    result_image.show()
+                    image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+                    
+
+                    # Функция для рассчета расстояния между двумя точками
+                    def calculate_distance(point1, point2):
+                        if point1 is None or point2 is None:
+                            return None
+                        return np.sqrt((point2[0] - point1[0])**2 + (point2[1] - point1[1])**2)
+
+                    # Функция обработки событий мыши
+                    def on_click(event):
+                        global point1, point2, lines
+                        
+                        if event.button == 1 and event.key == 'control':  # Левая кнопка мыши и зажата кнопка Ctrl
+                            print(f'Клик по координатам: ({event.xdata}, {event.ydata})')
+                            ax.plot(event.xdata, event.ydata, 'ro')  # Рисуем красную точку в месте клика
+                            ax.annotate(f'({event.xdata:.0f}, {event.ydata:.0f})', (event.xdata, event.ydata), xytext=(10, -10), textcoords='offset points', color='red')  # Добавляем подпись с координатами
+                            fig.canvas.draw()
+                            
+                            if point1 is None:
+                                point1 = (event.xdata, event.ydata)
+                            elif point2 is None:
+                                point2 = (event.xdata, event.ydata)
+                                
+                                # Рассчитываем расстояние между точками
+                                distance = calculate_distance(point1, point2) * 0.0212765957446 * 1.125
+                                print(f'Расстояние между точками: {distance:.3f} миллиметров')
+                                
+                                # Рисуем линию между точками и сохраняем ее
+                                line = ax.plot([point1[0], point2[0]], [point1[1], point2[1]], 'r-')
+                                lines.append(line)
+                                
+                                # Выводим расстояние на экран
+                                ax.annotate(f'{distance:.3f} мм', ((point1[0] + point2[0]) / 2, (point1[1] + point2[1]) / 2), xytext=(10, -10), textcoords='offset points', color='blue')  
+                                
+                                point1 = None
+                                point2 = None
+                            
+                            fig.canvas.draw()
+                            
+                        elif event.button == 2:  # Нажата клавиша D и зажата кнопка Ctrl
+                            print('Удаление всех точек и расстояний')
+                            for line in lines:
+                                line.pop(0).remove()  # Удаляем линии
+                            lines.clear()  # Очищаем список линий
+                            ax.clear()  # Очищаем оси
+                            ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))  # Выводим изображение заново
+                            fig.canvas.draw()
+
+                    # Создание фигуры и осей matplotlib
+                    fig, ax = plt.subplots()
+                    ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+
+                    # Установка обработчика событий мыши
+                    fig.canvas.mpl_connect('button_press_event', on_click)
+
+                    plt.show()
             else:
                 self.ui.errorLabel.setText("Выберите режим")
         else:
@@ -313,6 +416,23 @@ def CircleDetection(img):
 
     else:
         trouble_text = "Круги не обнаружены на изображении."
+
+def LineDetection(img):
+    global trouble_text
+
+    # Применение метода Canny для обнаружения границ
+    edges = cv2.Canny(img, 50, 150, apertureSize=3)
+
+    # Обнаружение линий на изображении
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=100, maxLineGap=10)
+
+
+    if lines is not None:
+            
+        return lines
+
+    else:
+        trouble_text = "Линии не обнаружены на изображении."
 
 def CircleSorting(circles):
     circles = sorted(circles, key=lambda x: (x[1] // 131, x[0], x[1], x[0]))
