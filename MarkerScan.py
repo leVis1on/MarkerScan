@@ -5,11 +5,9 @@ from PIL import Image, ImageChops
 import math
 from PyQt6.QtWidgets import QApplication, QWidget, QFileDialog
 from MarkerScanUI import Ui_MarkerScan
-import random
 import matplotlib.pyplot as plt
 
 size = 8000
-# Глобальные переменные для хранения координат двух точек
 point1 = None
 point2 = None
 lines = []
@@ -91,15 +89,27 @@ class MarkerScan(QWidget):
                         coords_target.append(array)
                     
                     coords_target_attempt, max_deviation = CircleSorting(coords_target)
-                    
 
+                    distances = []
+                    
                     white_image = np.ones((size, size), dtype=np.uint8) * 255
 
                     color_image = cv2.cvtColor(white_image, cv2.COLOR_GRAY2BGR)
 
+                    for point1, point2 in zip(coords_sample, coords_target_attempt):
+                        distance = round(calculate_distance(point1, point2)) * 0.021167
+                        distances.append(distance)
+
                     CircleMarking(color_image, coords_target_attempt, (255, 0, 0))
-                    
-                    CircleMarking(color_image, coords_sample, (0, 0, 0))  
+            
+                    CircleMarking(color_image, coords_sample, (0, 0, 0))
+
+                    i = 0
+
+                    for circle in coords_target_attempt:
+                        x, y = circle
+                        cv2.putText(color_image, f'{distances[i]:.3f} mm', (x - 50, y + 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                        i+=1  
 
                     delta = DeltaCompute(coords_sample, coords_target_attempt)
 
@@ -138,13 +148,26 @@ class MarkerScan(QWidget):
 
                             counter+=1
 
+                        distances = []
+
                         white_image = np.ones((size, size), dtype=np.uint8) * 255
 
                         color_image = cv2.cvtColor(white_image, cv2.COLOR_GRAY2BGR)
 
+                        for point1, point2 in zip(coords_sample, coords_target_attempt):
+                            distance = round(calculate_distance(point1, point2)) * 0.021167
+                            distances.append(distance)
+
                         CircleMarking(color_image, coords_target_attempt, (255, 0, 0))
                 
                         CircleMarking(color_image, coords_sample, (0, 0, 0))
+
+                        i = 0
+
+                        for circle in coords_target_attempt:
+                            x, y = circle
+                            cv2.putText(color_image, f'{distances[i]:.3f} mm', (x - 50, y + 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                            i+=1
 
                         SaveFile(self, Image.fromarray(color_image))
 
@@ -165,46 +188,6 @@ class MarkerScan(QWidget):
                 if (imgCv_1 is not None) and (imgCv_2 is not None):
                     
                     color_image = cv2.cvtColor(imgCv_2, cv2.COLOR_GRAY2BGR)
-                    
-
-                    '''# Применение алгоритма Хафа для обнаружения линий
-                    edges = cv2.Canny(imgCv_2, 50, 150, apertureSize=3)
-                    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=200, maxLineGap=100)
-
-                    # Рисование обнаруженных линий на изображении
-                    for line in lines:
-                        x1, y1, x2, y2 = line[0]
-                        cv2.line(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-                    # Поиск пересечений линий
-                    intersections = []
-                    for i in range(len(lines)):
-                        for j in range(i+1, len(lines)):
-                            line1 = lines[i][0]
-                            line2 = lines[j][0]
-                            x1, y1, x2, y2 = line1
-                            x3, y3, x4, y4 = line2
-                            denominator = ((y4-y3)*(x2-x1)) - ((x4-x3)*(y2-y1))
-                            if denominator != 0:
-                                ua = (((x4-x3)*(y1-y3)) - ((y4-y3)*(x1-x3))) / denominator
-                                ub = (((x2-x1)*(y1-y3)) - ((y2-y1)*(x1-x3))) / denominator
-                                if 0 < ua < 1 and 0 < ub < 1:
-                                    intersection_x = int(x1 + ua*(x2-x1))
-                                    intersection_y = int(y1 + ua*(y2-y1))
-                                    intersections.append((intersection_x, intersection_y))
-                                    cv2.circle(color_image, (intersection_x, intersection_y), 5, (255, 0, 0), -1)
-                                    # Генерация рандомного цвета текста
-                                    text_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-                                    # Нарисовать прямоугольник под текстом координат
-                                    cv2.rectangle(color_image, (intersection_x + 15, intersection_y - 25), 
-                                                (intersection_x + 150, intersection_y + 5), (0, 0, 0), -1)
-                                    # Добавление текста с координатами рядом с точками
-                                    cv2.putText(color_image, f'({intersection_x}, {intersection_y})', 
-                                                (intersection_x + 10, intersection_y), 
-                                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
-                    print(len(intersections))
-                    
-                    Image.fromarray(color_image).show()'''
 
                     imgPIL_1 = Image.fromarray(imgCv_1)
                     imgPIL_2 = Image.fromarray(imgCv_2)
@@ -249,22 +232,14 @@ class MarkerScan(QWidget):
                     cv_image = cv2.cvtColor(np.array(result_image), cv2.COLOR_RGB2BGR)
 
                     image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-                    
 
-                    # Функция для рассчета расстояния между двумя точками
-                    def calculate_distance(point1, point2):
-                        if point1 is None or point2 is None:
-                            return None
-                        return np.sqrt((point2[0] - point1[0])**2 + (point2[1] - point1[1])**2)
-
-                    # Функция обработки событий мыши
                     def on_click(event):
                         global point1, point2, lines
                         
-                        if event.button == 1 and event.key == 'control':  # Левая кнопка мыши и зажата кнопка Ctrl
+                        if event.button == 1 and event.key == 'control':
                             print(f'Клик по координатам: ({event.xdata}, {event.ydata})')
-                            ax.plot(event.xdata, event.ydata, 'ro')  # Рисуем красную точку в месте клика
-                            ax.annotate(f'({event.xdata:.0f}, {event.ydata:.0f})', (event.xdata, event.ydata), xytext=(10, -10), textcoords='offset points', color='red')  # Добавляем подпись с координатами
+                            ax.plot(event.xdata, event.ydata, 'go')
+                            ax.annotate(f'({event.xdata:.0f}, {event.ydata:.0f})', (event.xdata, event.ydata), xytext=(10, -10), textcoords='offset points', color='green')
                             fig.canvas.draw()
                             
                             if point1 is None:
@@ -272,15 +247,12 @@ class MarkerScan(QWidget):
                             elif point2 is None:
                                 point2 = (event.xdata, event.ydata)
                                 
-                                # Рассчитываем расстояние между точками
-                                distance = calculate_distance(point1, point2) * 0.0212765957446 * 1.125
+                                distance = round(calculate_distance(point1, point2)) * 0.021167 * 1.125
                                 print(f'Расстояние между точками: {distance:.3f} миллиметров')
                                 
-                                # Рисуем линию между точками и сохраняем ее
-                                line = ax.plot([point1[0], point2[0]], [point1[1], point2[1]], 'r-')
+                                line = ax.plot([point1[0], point2[0]], [point1[1], point2[1]], 'g-')
                                 lines.append(line)
                                 
-                                # Выводим расстояние на экран
                                 ax.annotate(f'{distance:.3f} мм', ((point1[0] + point2[0]) / 2, (point1[1] + point2[1]) / 2), xytext=(10, -10), textcoords='offset points', color='blue')  
                                 
                                 point1 = None
@@ -288,20 +260,18 @@ class MarkerScan(QWidget):
                             
                             fig.canvas.draw()
                             
-                        elif event.button == 2:  # Нажата клавиша D и зажата кнопка Ctrl
+                        elif event.button == 2:
                             print('Удаление всех точек и расстояний')
                             for line in lines:
-                                line.pop(0).remove()  # Удаляем линии
-                            lines.clear()  # Очищаем список линий
-                            ax.clear()  # Очищаем оси
-                            ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))  # Выводим изображение заново
+                                line.pop(0).remove()
+                            lines.clear()
+                            ax.clear()
+                            ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
                             fig.canvas.draw()
 
-                    # Создание фигуры и осей matplotlib
                     fig, ax = plt.subplots()
                     ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
-                    # Установка обработчика событий мыши
                     fig.canvas.mpl_connect('button_press_event', on_click)
 
                     plt.show()
@@ -416,23 +386,6 @@ def CircleDetection(img):
 
     else:
         trouble_text = "Круги не обнаружены на изображении."
-
-def LineDetection(img):
-    global trouble_text
-
-    # Применение метода Canny для обнаружения границ
-    edges = cv2.Canny(img, 50, 150, apertureSize=3)
-
-    # Обнаружение линий на изображении
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=100, maxLineGap=10)
-
-
-    if lines is not None:
-            
-        return lines
-
-    else:
-        trouble_text = "Линии не обнаружены на изображении."
 
 def CircleSorting(circles):
     circles = sorted(circles, key=lambda x: (x[1] // 131, x[0], x[1], x[0]))
@@ -578,6 +531,11 @@ def SaveFile(self, img):
     file_name, _ = QFileDialog.getSaveFileName(self, "Сохранить файл", "", "Изображение (*.png)")
     if file_name:
         img.save(file_name)
+
+def calculate_distance(point1, point2):
+                        if point1 is None or point2 is None:
+                            return None
+                        return np.sqrt((point2[0] - point1[0])**2 + (point2[1] - point1[1])**2)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
